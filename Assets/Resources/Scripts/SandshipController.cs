@@ -11,15 +11,19 @@ public class SandshipController : MonoBehaviour
 
     [Tooltip("最大前进速度")]
     [SerializeField]
-    private float maxForwardSpeed = 10f;
+    private float maxForwardSpeed = 20f;
 
     [Tooltip("最大倒车速度")]
     [SerializeField]
-    private float maxReverseSpeed = 4f;
+    private float maxReverseSpeed = 8f;
 
     [Tooltip("按 W 时的前进加速度")]
     [SerializeField]
     private float forwardAcceleration = 8f;
+
+    [Tooltip("前进时按下S的制动加速度")]
+    [SerializeField]
+    private float brakingAcceleration = 20f;
 
     [Tooltip("按 S 时的倒车加速度")]
     [SerializeField]
@@ -60,7 +64,6 @@ public class SandshipController : MonoBehaviour
     [Range(0.05f, 1f)]
     [SerializeField]
     private float fullTurnControlSpeedRatio = 0.4f;
-
 
     // =========================================================
     // Ground FX
@@ -208,11 +211,22 @@ public class SandshipController : MonoBehaviour
 
         if (throttleInput > 0.01f)
         {
-            forwardSpeed = Mathf.MoveTowards(
-                forwardSpeed,
-                maxForwardSpeed,
-                forwardAcceleration * deltaTime
-            );
+            if(forwardSpeed >= 0f)
+            {
+                forwardSpeed = Mathf.MoveTowards(
+                                forwardSpeed,
+                                maxForwardSpeed,
+                                forwardAcceleration * deltaTime
+                );
+            }
+            else
+            {
+                forwardSpeed = Mathf.MoveTowards(
+                    forwardSpeed,
+                    0,
+                    brakingAcceleration * deltaTime
+                );
+            }
         }
 
         // -----------------------------------------------------
@@ -221,11 +235,22 @@ public class SandshipController : MonoBehaviour
 
         else if (throttleInput < -0.01f)
         {
-            forwardSpeed = Mathf.MoveTowards(
-                forwardSpeed,
-                -maxReverseSpeed,
-                reverseAcceleration * deltaTime
-            );
+            if(forwardSpeed > 0.01)
+            {
+                 forwardSpeed = Mathf.MoveTowards(
+                    forwardSpeed,
+                    0,
+                    brakingAcceleration * deltaTime
+                 );
+            }
+            else
+            {
+                forwardSpeed = Mathf.MoveTowards(
+                    forwardSpeed,
+                    -maxReverseSpeed,
+                    reverseAcceleration * deltaTime
+                 );
+            }
         }
 
         // -----------------------------------------------------
@@ -368,10 +393,49 @@ public class SandshipController : MonoBehaviour
         );
     }
 
-
     // =========================================================
     // Ground FX
     // =========================================================
+
+    private void UpdateDustParticle(ParticleSystem dustParticle, bool isMoving)
+    {
+        // -------------------------
+        // 扬沙
+        // -------------------------
+        if (dustParticle != null)
+        {
+            var emission = dustParticle.emission;
+
+            // 完全关闭 Rate over Distance
+            emission.rateOverDistanceMultiplier = 0f;
+
+            if (!isMoving)
+            {
+                emission.rateOverTimeMultiplier = 0f;
+            }
+            else
+            {
+                float speed01 = SpeedNormalized;
+
+                // 让低速也有明显扬沙，
+                // 高速则增长得更明显
+                float dustFactor = Mathf.Pow(speed01, 0.65f);
+
+                emission.rateOverTimeMultiplier =
+                    Mathf.Lerp(
+                        minDustRate,
+                        maxDustRate,
+                        dustFactor
+                    );
+            }
+
+            // 防止粒子系统因为之前停过而不再播放
+            if (!dustParticle.isPlaying)
+            {
+                dustParticle.Play();
+            }
+        }
+    }
 
     private void UpdateGroundFX()
     {
@@ -392,50 +456,9 @@ public class SandshipController : MonoBehaviour
         // -----------------------------------------------------
         // Dust Particle
         // -----------------------------------------------------
-
-        if (dustParticleLeft != null)
-        {
-            ParticleSystem.EmissionModule emission = dustParticleLeft.emission;
-
-            if (!isMoving)
-            {
-                // 停止产生新粒子。
-                // 已经生成的粒子仍然自然消散。
-                emission.rateOverDistanceMultiplier = 0f;
-            }
-            else
-            {
-                // 速度越快，扬沙越明显
-                emission.rateOverDistanceMultiplier =
-                    Mathf.Lerp(
-                        minDustRate,
-                        maxDustRate,
-                        SpeedNormalized
-                    );
-            }
-        }
-
-        if(dustParticleRight != null)
-        {
-            ParticleSystem.EmissionModule emission =
-                    dustParticleRight.emission;
-
-            if (!isMoving)
-            {
-                // 停止产生新粒子。
-                // 已经生成的粒子仍然自然消散。
-                emission.rateOverDistanceMultiplier = 0f;
-            }
-            else
-            {
-                // 速度越快，扬沙越明显
-                emission.rateOverDistanceMultiplier =
-                    Mathf.Lerp(
-                        minDustRate,
-                        maxDustRate,
-                        SpeedNormalized
-                    );
-            }
-        }
+        UpdateDustParticle(dustParticleLeft, isMoving);
+        UpdateDustParticle(dustParticleRight, isMoving);
     }
+
+
 }
